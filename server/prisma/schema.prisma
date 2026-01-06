@@ -1,0 +1,377 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  firstName        String
+  lastName         String
+  studentId        String   @unique
+  passwordHash     String
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lastLoginAt      DateTime?
+
+  // Relationships
+  enrollments      Enrollment[]
+  submissions      Submission[]
+  grades           Grade[]
+  sentMessages     Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageReceiver")
+  notifications    Notification[]
+  bookmarks        Bookmark[]
+  progress         Progress[]
+  preferences      NotificationPreference?
+
+  @@map("students")
+}
+
+model Teacher {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  firstName    String
+  lastName     String
+  teacherId    String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  courses      Course[]
+  sentMessages Message[] @relation("TeacherMessageSender")
+  grades       Grade[]
+
+  @@map("teachers")
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  courseCode  String   @unique
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Foreign Keys
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  modules     Module[]
+  assignments Assignment[]
+  enrollments Enrollment[]
+  messages    Message[]
+  progress    Progress[]
+
+  @@map("courses")
+}
+
+model Module {
+  id          String @id @default(cuid())
+  title       String
+  description String?
+  order       Int
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Foreign Keys
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  lessons Lesson[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id                String @id @default(cuid())
+  title             String
+  content           String
+  order             Int
+  estimatedDuration Int // in minutes
+  isActive          Boolean @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Foreign Keys
+  moduleId String
+  module   Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  materials Material[]
+  bookmarks Bookmark[]
+  progress  Progress[]
+
+  @@map("lessons")
+}
+
+model Material {
+  id       String      @id @default(cuid())
+  title    String
+  type     MaterialType
+  url      String?
+  content  String?
+  fileSize Int?
+  order    Int
+  isActive Boolean     @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Foreign Keys
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("materials")
+}
+
+model Assignment {
+  id               String   @id @default(cuid())
+  title            String
+  description      String
+  dueDate          DateTime
+  maxPoints        Int
+  allowedFileTypes String[] // JSON array of file extensions
+  maxFileSize      Int      // in bytes
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Foreign Keys
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  submissions Submission[]
+  grades      Grade[]
+
+  @@map("assignments")
+}
+
+model Submission {
+  id          String   @id @default(cuid())
+  submittedAt DateTime @default(now())
+  isLate      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Foreign Keys
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  files UploadedFile[]
+  grade Grade?
+
+  @@unique([assignmentId, studentId])
+  @@map("submissions")
+}
+
+model UploadedFile {
+  id         String @id @default(cuid())
+  fileName   String
+  fileType   String
+  fileSize   Int
+  storageUrl String
+  createdAt  DateTime @default(now())
+
+  // Foreign Keys
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("uploaded_files")
+}
+
+model Grade {
+  id       String   @id @default(cuid())
+  points   Float
+  maxPoints Float
+  feedback String?
+  gradedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign Keys
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submissionId String     @unique
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  gradedBy     String
+  teacher      Teacher    @relation(fields: [gradedBy], references: [id])
+
+  @@unique([studentId, assignmentId])
+  @@map("grades")
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  enrolledAt DateTime @default(now())
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Foreign Keys
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@map("enrollments")
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  content   String
+  sentAt    DateTime    @default(now())
+  isRead    Boolean     @default(false)
+  type      MessageType @default(DIRECT)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Foreign Keys - Polymorphic sender (Student or Teacher)
+  senderId       String?
+  senderStudent  Student? @relation("MessageSender", fields: [senderId], references: [id])
+  teacherSenderId String?
+  senderTeacher  Teacher? @relation("TeacherMessageSender", fields: [teacherSenderId], references: [id])
+  
+  receiverId String?
+  receiver   Student? @relation("MessageReceiver", fields: [receiverId], references: [id])
+  
+  courseId String?
+  course   Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  type         NotificationType
+  title        String
+  message      String
+  isRead       Boolean          @default(false)
+  scheduledFor DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Foreign Keys
+  userId String
+  user   Student @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                    String  @id @default(cuid())
+  assignmentReminders   Boolean @default(true)
+  gradeNotifications    Boolean @default(true)
+  messageNotifications  Boolean @default(true)
+  announcementNotifications Boolean @default(true)
+  emailNotifications    Boolean @default(true)
+  pushNotifications     Boolean @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Foreign Keys
+  studentId String  @unique
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  title     String
+  createdAt DateTime @default(now())
+
+  // Foreign Keys
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lessonId  String
+  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, lessonId])
+  @@map("bookmarks")
+}
+
+model Progress {
+  id                   String    @id @default(cuid())
+  completionPercentage Float     @default(0)
+  lastAccessed         DateTime  @default(now())
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Foreign Keys
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonId  String?
+  lesson    Lesson? @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId, lessonId])
+  @@map("progress")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userType  UserType
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum MaterialType {
+  VIDEO
+  DOCUMENT
+  LINK
+  INTERACTIVE
+  QUIZ
+}
+
+enum MessageType {
+  DIRECT
+  FORUM
+  ANNOUNCEMENT
+}
+
+enum NotificationType {
+  ASSIGNMENT_DUE
+  GRADE_POSTED
+  ANNOUNCEMENT
+  MESSAGE_RECEIVED
+  COURSE_UPDATE
+}
+
+enum UserType {
+  STUDENT
+  TEACHER
+  ADMIN
+}

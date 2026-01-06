@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: lms-postgres
+    environment:
+      POSTGRES_DB: student_lms
+      POSTGRES_USER: lms_user
+      POSTGRES_PASSWORD: lms_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - lms-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: lms-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lms-network
+
+  # Backend API Server
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: lms-api
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://lms_user:lms_password@postgres:5432/student_lms
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-in-production
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - lms-network
+
+  # Frontend React App
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: lms-client
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - lms-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: lms-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./client/dist:/usr/share/nginx/html
+    depends_on:
+      - client
+      - api
+    networks:
+      - lms-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  lms-network:
+    driver: bridge
